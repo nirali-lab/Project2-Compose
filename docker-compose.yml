@@ -1,0 +1,26 @@
+version: '3.8'
+
+# Docker Compose for Jenkins + Docker-in-Docker (lab/demo only)
+services:
+  dind:
+    image: docker:24.0-dind      # DinD: docker daemon for Jenkins to use
+    privileged: true             # required for DinD in labs (not for production)
+    environment:
+      - DOCKER_TLS_CERTDIR=""    # disable TLS for lab use
+    volumes:
+      - docker-data:/var/lib/docker
+
+  jenkins:
+    image: jenkins/jenkins:lts-jdk11
+    ports:
+      - "8080:8080"              # Jenkins UI
+      - "50000:50000"            # agent port
+    depends_on:
+      - dind
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ./init.groovy.d:/var/jenkins_home/init.groovy.d:ro  # optional init scripts
+
+volumes:
+  docker-data:
+  jenkins_home:
