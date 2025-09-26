@@ -1,43 +1,50 @@
+# Docker Compose configuration for Jenkins CI with Docker-in-Docker (DinD)
 version: '3.8'
-# Docker Compose file to set up Jenkins CI environment with Docker-in-Docker (DinD)
 
 services:
-  docker:
-    # DinD service to allow Jenkins to run Docker commands
+  # Docker-in-Docker service
+  dind:
     image: docker:dind
-    privileged: true   # Required for Docker-in-Docker
-    restart: unless-stopped
+    privileged: true  # Enables DinD to run Docker commands
     environment:
-      - DOCKER_TLS_CERTDIR=/certs    # Secure Docker with TLS
+      DOCKER_TLS_CERTDIR: ""  # Disable TLS for simplicity (enable for production)
     volumes:
-      - docker-certs:/certs/client   # Shared TLS certs with Jenkins
-      - docker-data:/var/lib/docker   # Persistent Docker layer cache
+      - docker-cache:/var/lib/docker  # Persistent Docker layer cache
     networks:
-      - jenkins
+      - jenkins-net
 
+  # Jenkins service
   jenkins:
-    # Jenkins LTS image
     image: jenkins/jenkins:lts
-    user: root    # Required to install plugins and use Docker socket
-    restart: unless-stopped
-    ports:
-      - "8080:8080"   # Jenkins UI
-      - "50000:50000"   # For Jenkins agents
+    user: root  # Run as root to access Docker socket
     environment:
-      - DOCKER_HOST=tcp://docker:2376
-      - DOCKER_CERT_PATH=/certs/client
-      - DOCKER_TLS_VERIFY=1
+      JENKINS_HOME: /var/jenkins_home  # Persistent Jenkins home directory
+      JAVA_OPTS: -Djenkins.install.runSetupWizard=false  # Disable setup wizard for automation
     volumes:
-      - jenkins-data:/var/jenkins_home   # Jenkins home directory
-      - docker-certs:/certs/client:ro    # Mount certs from DinD
+      - jenkins-home:/var/jenkins_home  # Jenkins home volume
+      - /var/run/docker.sock:/var/run/docker.sock  # Allow Jenkins to access Docker socket
+    ports:
+      - "8080:8080"  # Jenkins web UI
+      - "50000:50000"  # Jenkins agent port
     networks:
-      - jenkins
-# Named volumes for persistence
-volumes:
-  jenkins-data:
-  docker-certs:
-  docker-data:
-# Custom network for communication between Jenkins and Docker
+      - jenkins-net
 
 networks:
-  jenkins:
+  jenkins-net:
+    driver: bridge  # Isolated network for Jenkins and DinD
+
+volumes:
+  jenkins-home:  # Persistent storage for Jenkins data
+  docker-cache:  # Persistent storage for Docker layer cache
+
+# ------------------ Security Hardening Notes ------------------
+# 1. Disable Anonymous Access:
+#    - After Jenkins starts, go to Manage Jenkins > Configure Global Security.
+#    - Uncheck "Allow anonymous read access".
+#
+# 2. Create a Non-Admin Pipeline User:
+#    - In Jenkins UI: Manage Jenkins > Security > Users > Create a new user.
+#    - Assign only necessary permissions (not admin).
+#    - Use this user for your pipeline authentication.
+#
+# --------------------------------------------------------------
